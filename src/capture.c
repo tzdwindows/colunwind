@@ -204,6 +204,8 @@ colunwind_status_t colunwind_init(const colunwind_config_t* config) {
     colunwind_arena_init(&g_colunwind_runtime.arena, g_colunwind_runtime.arena_raw_mem, arena_sz);
 
 #if defined(_WIN32)
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
     g_colunwind_runtime.process_handle = GetCurrentProcess();
     /* 初始化 DbgHelp 符号表 */
     SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
@@ -537,7 +539,7 @@ void colunwind_print_backtrace_detailed(const colunwind_backtrace_t* trace, uint
         /* 帧头部：不再显示晦涩无用的汇编字节偏移 (+0x132 等)，替换为明确的行列说明与语义描述 */
         if (is_wrapper) {
             colunwind_safe_snprintf(line_buf, sizeof(line_buf),
-                "#%02u %p in %s() [%s] (C 运行时/系统启动封装入口)\n",
+                "#%02u %p in %s() [%s] (C 运行时/系统启动封装入口 / CRT Startup)\n",
                 (unsigned)i,
                 (void*)f->instruction_pointer,
                 sym,
@@ -564,7 +566,7 @@ void colunwind_print_backtrace_detailed(const colunwind_backtrace_t* trace, uint
         /* 源码绝对路径与具体代码行输出 */
         if (f->file_path[0] != '\0' && f->line > 0) {
             colunwind_safe_snprintf(line_buf, sizeof(line_buf),
-                "     位置: %s:%u:%u\n",
+                "     位置 [Location]: %s:%u:%u\n",
                 f->file_path,
                 (unsigned)f->line,
                 (unsigned)f->column);
@@ -572,16 +574,16 @@ void colunwind_print_backtrace_detailed(const colunwind_backtrace_t* trace, uint
 
             if (f->source_line[0] != '\0') {
                 colunwind_safe_snprintf(line_buf, sizeof(line_buf),
-                    "     代码: %s\n",
+                    "     代码 [Code]:     %s\n",
                     f->source_line);
                 colunwind_raw_write_string_stderr(line_buf);
             }
 
             /* 输出该位置前后段落上下文 (哪一段代码)，带 > 行指示与 ^ 列号指针 */
             if (f->source_snippet[0] != '\0') {
-                colunwind_raw_write_string_stderr("     ------------------ 源码段落预览 ------------------\n");
+                colunwind_raw_write_string_stderr("     ------------------ 源码段落预览 [Source Context] ------------------\n");
                 colunwind_raw_write_string_stderr(f->source_snippet);
-                colunwind_raw_write_string_stderr("     --------------------------------------------------\n");
+                colunwind_raw_write_string_stderr("     -------------------------------------------------------------------\n");
             }
         }
     }

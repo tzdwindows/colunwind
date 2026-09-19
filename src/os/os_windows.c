@@ -18,10 +18,69 @@ void colunwind_os_free_pages(void* ptr, size_t size) {
 void colunwind_os_write_stderr(const char* data, size_t len) {
     if (!data || len == 0) return;
     HANDLE hStdErr = GetStdHandle(STD_ERROR_HANDLE);
-    if (hStdErr != NULL && hStdErr != INVALID_HANDLE_VALUE) {
-        DWORD written = 0;
-        WriteFile(hStdErr, data, (DWORD)len, &written, NULL);
+    if (hStdErr == NULL || hStdErr == INVALID_HANDLE_VALUE) return;
+
+    DWORD mode = 0;
+    if (GetConsoleMode(hStdErr, &mode)) {
+        /* 控制台环境：转换为 UTF-16 并调用 WriteConsoleW，Windows 控制台直接原生渲染 Unicode，解决任何代码页乱码 */
+        wchar_t wbuf[512];
+        const char* p = data;
+        size_t remaining = len;
+
+        while (remaining > 0) {
+            int chunk_len = (remaining > 400) ? 400 : (int)remaining;
+            if (chunk_len < (int)remaining) {
+                while (chunk_len > 0 && ((unsigned char)p[chunk_len] & 0xC0) == 0x80) {
+                    chunk_len--;
+                }
+            }
+            if (chunk_len == 0) chunk_len = 1;
+
+            int wlen = MultiByteToWideChar(CP_UTF8, 0, p, chunk_len, wbuf, (int)(sizeof(wbuf) / sizeof(wbuf[0])));
+            if (wlen > 0) {
+                DWORD written = 0;
+                WriteConsoleW(hStdErr, wbuf, (DWORD)wlen, &written, NULL);
+            }
+            p += chunk_len;
+            remaining -= (size_t)chunk_len;
+        }
+        return;
     }
+
+    /* 管道或文件重定向环境：若当前系统输出代码页不是 UTF-8，转换为对应代码页输出以防止重定向乱码 */
+    UINT cp = GetConsoleOutputCP();
+    if (cp == 0) cp = GetACP();
+    if (cp != CP_UTF8 && cp != 0) {
+        wchar_t wbuf[256];
+        char ansibuf[512];
+        const char* p = data;
+        size_t remaining = len;
+
+        while (remaining > 0) {
+            int chunk_len = (remaining > 200) ? 200 : (int)remaining;
+            if (chunk_len < (int)remaining) {
+                while (chunk_len > 0 && ((unsigned char)p[chunk_len] & 0xC0) == 0x80) {
+                    chunk_len--;
+                }
+            }
+            if (chunk_len == 0) chunk_len = 1;
+
+            int wlen = MultiByteToWideChar(CP_UTF8, 0, p, chunk_len, wbuf, (int)(sizeof(wbuf) / sizeof(wbuf[0])));
+            if (wlen > 0) {
+                int mb_len = WideCharToMultiByte(cp, 0, wbuf, wlen, ansibuf, (int)sizeof(ansibuf), NULL, NULL);
+                if (mb_len > 0) {
+                    DWORD written = 0;
+                    WriteFile(hStdErr, ansibuf, (DWORD)mb_len, &written, NULL);
+                }
+            }
+            p += chunk_len;
+            remaining -= (size_t)chunk_len;
+        }
+        return;
+    }
+
+    DWORD written = 0;
+    WriteFile(hStdErr, data, (DWORD)len, &written, NULL);
 }
 
 intptr_t colunwind_os_open_write(const char* path) {
