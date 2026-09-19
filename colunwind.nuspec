@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata minClientVersion="2.5">
+    <id>colunwind</id>
+    <version>1.0.0</version>
+    <title>colunwind</title>
+    <authors>tzdwindows</authors>
+    <owners>tzdwindows</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <projectUrl>https://github.com/tzdwindows/colunwind</projectUrl>
+    <description>Cross-platform lightweight crash capture, minidump, and precise line-column symbolization library in pure C (C99/C11). Supports Windows VEH/SEH with DbgHelp and POSIX sigaction with addr2line.</description>
+    <readme>README.md</readme>
+    <releaseNotes>Initial release v1.0.0 with Windows and POSIX support, exact line/column tracking, code snippet preview, and minidump/compact core dump generation.</releaseNotes>
+    <copyright>Copyright (c) 2026 tzdwindows</copyright>
+    <tags>native crash-handler stack-unwind symbolizer minidump c cpp c-plus-plus posix windows</tags>
+  </metadata>
+  <files>
+    <file src="include\colunwind\*.h" target="include\colunwind" />
+    <file src="nuget_native\colunwind.targets" target="build\native\colunwind.targets" />
+    <file src="build_win_release\Release\colunwind.lib" target="lib\native\x64\colunwind.lib" />
+    <file src="build_win_shared\Release\colunwind.dll" target="runtimes\win-x64\native\colunwind.dll" />
+    <file src="build_win_shared\Release\colunwind.lib" target="runtimes\win-x64\native\colunwind.lib" />
+    <file src="README.md" target="README.md" />
+    <file src="LICENSE" target="LICENSE" />
+  </files>
+</package>

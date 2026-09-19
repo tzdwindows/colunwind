@@ -46,6 +46,10 @@ MinSizeRel/
 *.ilk
 *.pdb
 *.idb
+*.nupkg
+nuget.exe
+*.zip
+*.tar.gz
 
 # Dump files & logs
 *.dmp
