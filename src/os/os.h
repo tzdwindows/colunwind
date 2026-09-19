@@ -52,12 +52,30 @@ void colunwind_os_get_timestamp(char* buf, size_t buf_len);
 bool colunwind_os_get_module_info(uintptr_t addr, char* out_mod_name, size_t mod_name_len, uintptr_t* out_base);
 
 /**
- * @brief 从源文件中安全读取指定行号的文本，并推断符号的起始列号
+ * @brief 从源文件中安全读取指定行号的文本，推断符号的起始列号并拷贝该行代码
  * @param file_path 源码文件路径
  * @param line_target 目标行号 (1-based)
  * @param symbol_name 目标符号名 (可为 NULL)
+ * @param out_line 接收该行修剪后代码文本 (可为 NULL)
+ * @param line_max_len 接收缓冲长度
  * @return 推导出的列号 (1-based)，若未找到或读取失败返回 1
  */
 uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t line_target, const char* symbol_name);
+
+uint32_t colunwind_os_extract_column_and_line(const char* file_path,
+                                              uint32_t line_target,
+                                              const char* symbol_name,
+                                              char* out_line,
+                                              size_t line_max_len);
+
+/**
+ * @brief 从源文件中提取包含目标行及前后上下文的源码段落文本 (含哪一段代码、指示符与列指针)
+ */
+bool colunwind_os_get_source_snippet(const char* file_path,
+                                     uint32_t line_target,
+                                     uint32_t column_target,
+                                     uint32_t context_lines,
+                                     char* out_buf,
+                                     size_t out_buf_len);
 
 #endif /* COLUNWIND_OS_H */

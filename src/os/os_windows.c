@@ -101,7 +101,14 @@ bool colunwind_os_get_module_info(uintptr_t addr, char* out_mod_name, size_t mod
     return true;
 }
 
-uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t line_target, const char* symbol_name) {
+uint32_t colunwind_os_extract_column_and_line(const char* file_path,
+                                              uint32_t line_target,
+                                              const char* symbol_name,
+                                              char* out_line,
+                                              size_t line_max_len) {
+    if (out_line && line_max_len > 0) {
+        out_line[0] = '\0';
+    }
     if (!file_path || line_target == 0) return 1;
 
     HANDLE hFile = CreateFileA(file_path,
@@ -115,7 +122,6 @@ uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t
         return 1;
     }
 
-    /* 逐行读取源码 */
     char buf[1024];
     DWORD bytes_read = 0;
     uint32_t current_line = 1;
@@ -126,9 +132,7 @@ uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t
     while (ReadFile(hFile, buf, sizeof(buf), &bytes_read, NULL) && bytes_read > 0) {
         for (DWORD i = 0; i < bytes_read; ++i) {
             char c = buf[i];
-            if (c == '\r') {
-                continue;
-            }
+            if (c == '\r') continue;
             if (c == '\n') {
                 if (current_line == line_target) {
                     line_buf[line_idx] = '\0';
@@ -143,9 +147,7 @@ uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t
                 }
             }
         }
-        if (found_line || current_line > line_target) {
-            break;
-        }
+        if (found_line || current_line > line_target) break;
     }
     CloseHandle(hFile);
 
@@ -154,8 +156,14 @@ uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t
         found_line = true;
     }
 
-    if (!found_line) {
-        return 1;
+    if (!found_line) return 1;
+
+    /* 拷贝提取到的源码行 */
+    if (out_line && line_max_len > 0) {
+        /* 修剪前导空格供显示 */
+        const char* p = line_buf;
+        while (*p == ' ' || *p == '\t') p++;
+        colunwind_safe_strncpy(out_line, p, line_max_len);
     }
 
     /* 查找 symbol_name 在该行中的位置 */
@@ -186,6 +194,93 @@ uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t
     }
 
     return 1;
+}
+
+uint32_t colunwind_os_extract_column_from_source(const char* file_path, uint32_t line_target, const char* symbol_name) {
+    return colunwind_os_extract_column_and_line(file_path, line_target, symbol_name, NULL, 0);
+}
+
+bool colunwind_os_get_source_snippet(const char* file_path,
+                                     uint32_t line_target,
+                                     uint32_t column_target,
+                                     uint32_t context_lines,
+                                     char* out_buf,
+                                     size_t out_buf_len) {
+    if (!out_buf || out_buf_len == 0) return false;
+    out_buf[0] = '\0';
+    if (!file_path || line_target == 0) return false;
+
+    HANDLE hFile = CreateFileA(file_path,
+                               GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               NULL,
+                               OPEN_EXISTING,
+                               FILE_ATTRIBUTE_NORMAL,
+                               NULL);
+    if (hFile == INVALID_HANDLE_VALUE) return false;
+
+    uint32_t start_line = (line_target > context_lines) ? (line_target - context_lines) : 1;
+    uint32_t end_line = line_target + context_lines;
+
+    char buf[1024];
+    DWORD bytes_read = 0;
+    uint32_t cur_line = 1;
+    char current_line_buf[512];
+    size_t line_idx = 0;
+    char snippet_temp[256];
+
+    while (ReadFile(hFile, buf, sizeof(buf), &bytes_read, NULL) && bytes_read > 0) {
+        for (DWORD i = 0; i < bytes_read; ++i) {
+            char c = buf[i];
+            if (c == '\r') continue;
+            if (c == '\n') {
+                if (cur_line >= start_line && cur_line <= end_line) {
+                    current_line_buf[line_idx] = '\0';
+                    bool is_target = (cur_line == line_target);
+                    colunwind_safe_snprintf(snippet_temp, sizeof(snippet_temp),
+                                            "    %c %4u | %s\n",
+                                            is_target ? '>' : ' ',
+                                            (unsigned)cur_line,
+                                            current_line_buf);
+                    colunwind_safe_strcat(out_buf, snippet_temp, out_buf_len);
+
+                    /* 在目标行下输出列号指示符 */
+                    if (is_target && column_target > 0) {
+                        char caret_line[256];
+                        colunwind_safe_strncpy(caret_line, "         | ", sizeof(caret_line));
+                        for (uint32_t k = 1; k < column_target && k < 120; ++k) {
+                            colunwind_safe_strcat(caret_line, " ", sizeof(caret_line));
+                        }
+                        colunwind_safe_strcat(caret_line, "^\n", sizeof(caret_line));
+                        colunwind_safe_strcat(out_buf, caret_line, out_buf_len);
+                    }
+                }
+                cur_line++;
+                line_idx = 0;
+                if (cur_line > end_line) break;
+            } else {
+                if (cur_line >= start_line && cur_line <= end_line && line_idx + 1 < sizeof(current_line_buf)) {
+                    current_line_buf[line_idx++] = c;
+                }
+            }
+        }
+        if (cur_line > end_line) break;
+    }
+    CloseHandle(hFile);
+
+    /* 文件末尾最后一行无换行符的情形 */
+    if (cur_line >= start_line && cur_line <= end_line && line_idx > 0) {
+        current_line_buf[line_idx] = '\0';
+        bool is_target = (cur_line == line_target);
+        colunwind_safe_snprintf(snippet_temp, sizeof(snippet_temp),
+                                "    %c %4u | %s\n",
+                                is_target ? '>' : ' ',
+                                (unsigned)cur_line,
+                                current_line_buf);
+        colunwind_safe_strcat(out_buf, snippet_temp, out_buf_len);
+    }
+
+    return (out_buf[0] != '\0');
 }
 
 #endif /* _WIN32 */

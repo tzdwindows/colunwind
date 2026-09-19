@@ -510,9 +510,20 @@ colunwind_status_t colunwind_uninstall_crash_handler(void) {
 /* 格式化输出与枚举转换 API                                                  */
 /* ========================================================================= */
 
-void colunwind_print_backtrace(const colunwind_backtrace_t* trace) {
+static bool colunwind_is_runtime_wrapper(const char* sym) {
+    if (!sym) return false;
+    return (strstr(sym, "__scrt_common_main") != NULL ||
+            strstr(sym, "invoke_main") != NULL ||
+            strstr(sym, "mainCRTStartup") != NULL ||
+            strstr(sym, "BaseThreadInitThunk") != NULL ||
+            strstr(sym, "RtlUserThreadStart") != NULL ||
+            strstr(sym, "__libc_start_main") != NULL);
+}
+
+void colunwind_print_backtrace_detailed(const colunwind_backtrace_t* trace, uint32_t context_lines) {
+    (void)context_lines;
     if (!trace || trace->frame_count == 0) {
-        colunwind_raw_write_string_stderr("  [Empty backtrace]\n");
+        colunwind_raw_write_string_stderr("  [空栈回溯轨迹 / Empty backtrace]\n");
         return;
     }
 
@@ -521,29 +532,63 @@ void colunwind_print_backtrace(const colunwind_backtrace_t* trace) {
         const colunwind_frame_t* f = &trace->frames[i];
         const char* sym = (f->symbol_name[0] != '\0') ? f->symbol_name : "???";
         const char* mod = (f->module_name[0] != '\0') ? f->module_name : "???";
+        bool is_wrapper = colunwind_is_runtime_wrapper(sym);
 
-        if (f->file_path[0] != '\0' && f->line > 0) {
+        /* 帧头部：不再显示晦涩无用的汇编字节偏移 (+0x132 等)，替换为明确的行列说明与语义描述 */
+        if (is_wrapper) {
             colunwind_safe_snprintf(line_buf, sizeof(line_buf),
-                "#%02u %p in %s+0x%x [%s] at %s:%u:%u\n",
+                "#%02u %p in %s() [%s] (C 运行时/系统启动封装入口)\n",
                 (unsigned)i,
                 (void*)f->instruction_pointer,
                 sym,
-                (unsigned)f->offset,
+                mod);
+        } else if (f->line > 0) {
+            colunwind_safe_snprintf(line_buf, sizeof(line_buf),
+                "#%02u %p in %s() [%s] (第 %u 行, 第 %u 列)\n",
+                (unsigned)i,
+                (void*)f->instruction_pointer,
+                sym,
                 mod,
-                f->file_path,
                 (unsigned)f->line,
                 (unsigned)f->column);
         } else {
             colunwind_safe_snprintf(line_buf, sizeof(line_buf),
-                "#%02u %p in %s+0x%x [%s]\n",
+                "#%02u %p in %s() [%s]\n",
                 (unsigned)i,
                 (void*)f->instruction_pointer,
                 sym,
-                (unsigned)f->offset,
                 mod);
         }
         colunwind_raw_write_string_stderr(line_buf);
+
+        /* 源码绝对路径与具体代码行输出 */
+        if (f->file_path[0] != '\0' && f->line > 0) {
+            colunwind_safe_snprintf(line_buf, sizeof(line_buf),
+                "     位置: %s:%u:%u\n",
+                f->file_path,
+                (unsigned)f->line,
+                (unsigned)f->column);
+            colunwind_raw_write_string_stderr(line_buf);
+
+            if (f->source_line[0] != '\0') {
+                colunwind_safe_snprintf(line_buf, sizeof(line_buf),
+                    "     代码: %s\n",
+                    f->source_line);
+                colunwind_raw_write_string_stderr(line_buf);
+            }
+
+            /* 输出该位置前后段落上下文 (哪一段代码)，带 > 行指示与 ^ 列号指针 */
+            if (f->source_snippet[0] != '\0') {
+                colunwind_raw_write_string_stderr("     ------------------ 源码段落预览 ------------------\n");
+                colunwind_raw_write_string_stderr(f->source_snippet);
+                colunwind_raw_write_string_stderr("     --------------------------------------------------\n");
+            }
+        }
     }
+}
+
+void colunwind_print_backtrace(const colunwind_backtrace_t* trace) {
+    colunwind_print_backtrace_detailed(trace, 2);
 }
 
 const char* colunwind_crash_type_to_string(colunwind_crash_type_t type) {

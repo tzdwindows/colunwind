@@ -92,13 +92,24 @@ colunwind_status_t colunwind_resolve_location(uintptr_t address, colunwind_frame
         out_frame->line = 0;
     }
 
-    /* 4. 精确列号定位解析 (结合源码映射与符号位置推算) */
+    /* 5. 精确列号定位与源码语句/段落提取 (哪一段代码) */
     if (out_frame->line > 0 && out_frame->file_path[0] != '\0') {
-        out_frame->column = colunwind_os_extract_column_from_source(out_frame->file_path,
-                                                                    out_frame->line,
-                                                                    out_frame->symbol_name);
+        out_frame->column = colunwind_os_extract_column_and_line(out_frame->file_path,
+                                                                out_frame->line,
+                                                                out_frame->symbol_name,
+                                                                out_frame->source_line,
+                                                                sizeof(out_frame->source_line));
+        /* 提取上下文代码段落 (前后各 2 行，带标记和列指针) */
+        colunwind_os_get_source_snippet(out_frame->file_path,
+                                        out_frame->line,
+                                        out_frame->column,
+                                        2,
+                                        out_frame->source_snippet,
+                                        sizeof(out_frame->source_snippet));
     } else {
         out_frame->column = 0;
+        out_frame->source_line[0] = '\0';
+        out_frame->source_snippet[0] = '\0';
     }
 
     out_frame->file = out_frame->file_path;
@@ -122,14 +133,24 @@ colunwind_status_t colunwind_resolve_location(uintptr_t address, colunwind_frame
         out_frame->offset = 0;
     }
 
-    /* 如果有内嵌 DWARF 行号信息，提取行列号 */
+    /* 如果有内嵌 DWARF 行号信息，提取行列号与源码 */
     if (out_frame->file_path[0] != '\0' && out_frame->line > 0) {
-        out_frame->column = colunwind_os_extract_column_from_source(out_frame->file_path,
-                                                                    out_frame->line,
-                                                                    out_frame->symbol_name);
+        out_frame->column = colunwind_os_extract_column_and_line(out_frame->file_path,
+                                                                out_frame->line,
+                                                                out_frame->symbol_name,
+                                                                out_frame->source_line,
+                                                                sizeof(out_frame->source_line));
+        colunwind_os_get_source_snippet(out_frame->file_path,
+                                        out_frame->line,
+                                        out_frame->column,
+                                        2,
+                                        out_frame->source_snippet,
+                                        sizeof(out_frame->source_snippet));
     } else {
         out_frame->line = 0;
         out_frame->column = 0;
+        out_frame->source_line[0] = '\0';
+        out_frame->source_snippet[0] = '\0';
     }
 
     out_frame->file = out_frame->file_path;
@@ -137,6 +158,19 @@ colunwind_status_t colunwind_resolve_location(uintptr_t address, colunwind_frame
 
     return COLUNWIND_SUCCESS;
 #endif
+}
+
+colunwind_status_t colunwind_get_source_snippet(const char* file_path,
+                                                uint32_t line,
+                                                uint32_t column,
+                                                uint32_t context_lines,
+                                                char* out_buf,
+                                                size_t out_buf_size) {
+    if (!file_path || line == 0 || !out_buf || out_buf_size == 0) {
+        return COLUNWIND_ERROR_INVALID_ARGUMENT;
+    }
+    bool ok = colunwind_os_get_source_snippet(file_path, line, column, context_lines, out_buf, out_buf_size);
+    return ok ? COLUNWIND_SUCCESS : COLUNWIND_ERROR_IO_FAILED;
 }
 
 colunwind_status_t colunwind_symbolize(colunwind_backtrace_t* trace) {

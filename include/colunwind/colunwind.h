@@ -90,6 +90,30 @@ COLUNWIND_API colunwind_status_t colunwind_write_dump(const char* dump_path, con
 COLUNWIND_API void colunwind_print_backtrace(const colunwind_backtrace_t* trace);
 
 /**
+ * @brief 格式化输出带精确源码段落上下文 (展示哪一段代码、高亮指示行与列号) 的详细栈回溯
+ * @param trace 待输出的栈回溯数据
+ * @param context_lines 目标行前后展示的代码上下文行数 (通常为 1 或 2)
+ */
+COLUNWIND_API void colunwind_print_backtrace_detailed(const colunwind_backtrace_t* trace, uint32_t context_lines);
+
+/**
+ * @brief 读取并生成指定源码文件的代码段落预览 (包含哪一段代码、行号及列指针)
+ * @param file_path 源码文件路径
+ * @param line 目标行号
+ * @param column 目标列号
+ * @param context_lines 前后上下文行数
+ * @param out_buf 输出缓冲区
+ * @param out_buf_size 缓冲区大小
+ * @return 状态码
+ */
+COLUNWIND_API colunwind_status_t colunwind_get_source_snippet(const char* file_path,
+                                                             uint32_t line,
+                                                             uint32_t column,
+                                                             uint32_t context_lines,
+                                                             char* out_buf,
+                                                             size_t out_buf_size);
+
+/**
  * @brief 将崩溃类型枚举转换为可读文本
  * @param type 崩溃类型
  * @return 描述字符串

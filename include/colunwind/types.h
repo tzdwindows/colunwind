@@ -51,6 +51,7 @@ typedef struct colunwind_source_location {
     uint32_t    line;        /**< 行号 (1-based, 0 为未知) */
     uint32_t    column;      /**< 列号 (1-based, 0 为未知) */
     const char* function;    /**< 函数符号名称 */
+    const char* source_line; /**< 源码当前行代码片段 */
 } colunwind_source_location_t;
 
 /**
@@ -69,6 +70,8 @@ typedef struct colunwind_frame {
     uint32_t                    column;                                /**< 1-based 列号 (显式包含) */
     const char*                 function;                              /**< 指向有效函数名缓冲 (显式包含) */
     uintptr_t                   offset;                                /**< 相对函数符号起始地址偏移 */
+    char                        source_line[256];                      /**< 源码当前行精确代码内容 */
+    char                        source_snippet[1024];                  /**< 精确源码上下文段落 (含行号标记与指针) */
 } colunwind_frame_t;
 
 /**

@@ -50,17 +50,25 @@ int main(void) {
     assert(strstr(frame.function, "colunwind_test_target_function") != NULL);
     assert(strstr(frame.file, "test_line_column") != NULL);
 
+    printf("[test_line_column] Source Line: %s\n", frame.source_line);
+    printf("[test_line_column] Snippet:\n%s\n", frame.source_snippet);
+
+    assert(frame.source_line[0] != '\0');
+    assert(frame.source_snippet[0] != '\0');
+
     /* 验证显式源码位置结构体 colunwind_source_location_t */
     colunwind_source_location_t loc;
     loc.file = frame.file;
     loc.line = frame.line;
     loc.column = frame.column;
     loc.function = frame.function;
+    loc.source_line = frame.source_line;
 
     assert(loc.line == frame.line);
     assert(loc.column == frame.column);
     assert(strcmp(loc.file, frame.file) == 0);
     assert(strcmp(loc.function, frame.function) == 0);
+    assert(strcmp(loc.source_line, frame.source_line) == 0);
 
     colunwind_shutdown();
     printf("[test_line_column] PASS\n");
