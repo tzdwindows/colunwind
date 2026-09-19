@@ -7,8 +7,11 @@
 
 #if defined(_WIN32)
 #include <windows.h>
-#else
-#include <execinfo.h>
+#elif defined(__has_include)
+  #if __has_include(<execinfo.h>)
+    #define COLUNWIND_HAS_EXECINFO 1
+    #include <execinfo.h>
+  #endif
 #endif
 
 /* 初始化空帧结构 */
@@ -163,7 +166,14 @@ colunwind_status_t colunwind_backtrace_capture(colunwind_backtrace_t* trace, uin
     }
     return COLUNWIND_SUCCESS;
 #else
-    /* POSIX fallback */
+    /* POSIX fallback: 使用 execinfo (如 Linux/glibc) 或 GCC frame pointer 回溯 */
+#if defined(__has_include)
+  #if __has_include(<execinfo.h>)
+    #define COLUNWIND_HAS_EXECINFO 1
+    #include <execinfo.h>
+  #endif
+#endif
+#if defined(COLUNWIND_HAS_EXECINFO)
     void* buffer[COLUNWIND_MAX_FRAMES];
     int nptrs = backtrace(buffer, COLUNWIND_MAX_FRAMES);
     for (int i = (int)skip_frames + 1; i < nptrs; ++i) {
@@ -171,5 +181,25 @@ colunwind_status_t colunwind_backtrace_capture(colunwind_backtrace_t* trace, uin
         colunwind_frame_init_defaults(frame, (uintptr_t)buffer[i], 0, 0);
     }
     return COLUNWIND_SUCCESS;
+#else
+    uintptr_t cur_fp = (uintptr_t)__builtin_frame_address(0);
+    uint32_t skipped = 0;
+    while (cur_fp != 0 && trace->frame_count < COLUNWIND_MAX_FRAMES) {
+        uintptr_t* fp_ptr = (uintptr_t*)cur_fp;
+        uintptr_t next_fp = fp_ptr[0];
+        uintptr_t ret_addr = fp_ptr[1];
+        if (ret_addr == 0 || next_fp <= cur_fp) {
+            break;
+        }
+        if (skipped < skip_frames) {
+            skipped++;
+        } else {
+            colunwind_frame_t* frame = &trace->frames[trace->frame_count++];
+            colunwind_frame_init_defaults(frame, ret_addr, cur_fp, next_fp);
+        }
+        cur_fp = next_fp;
+    }
+    return COLUNWIND_SUCCESS;
+#endif
 #endif
 }

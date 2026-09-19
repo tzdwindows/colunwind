@@ -1,6 +1,7 @@
 #include <colunwind/colunwind.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static void custom_crash_reporter(const colunwind_crash_context_t* context, void* user_data) {
     (void)user_data;

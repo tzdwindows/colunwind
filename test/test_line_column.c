@@ -20,6 +20,8 @@ void colunwind_test_target_function(void) {
 #endif
 
 int main(void) {
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
     colunwind_config_t cfg;
     colunwind_config_init(&cfg);
     colunwind_status_t status = colunwind_init(&cfg);

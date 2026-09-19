@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdarg.h>
+#include <string.h>
 
 #ifdef _WIN32
   #ifndef WIN32_LEAN_AND_MEAN

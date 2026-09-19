@@ -34,7 +34,7 @@ void colunwind_arch_extract_registers(const void* native_context, colunwind_arch
     regs->flags = (uintptr_t)ctx->EFlags;
 #endif
 
-#elif defined(__linux__) || defined(__APPLE__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__CYGWIN__) || defined(__MSYS__)
     #include <ucontext.h>
     const ucontext_t* uc = (const ucontext_t*)native_context;
 #if defined(__x86_64__)
@@ -42,6 +42,10 @@ void colunwind_arch_extract_registers(const void* native_context, colunwind_arch
     regs->ip = (uintptr_t)uc->uc_mcontext->__ss.__rip;
     regs->sp = (uintptr_t)uc->uc_mcontext->__ss.__rsp;
     regs->fp = (uintptr_t)uc->uc_mcontext->__ss.__rbp;
+  #elif defined(__CYGWIN__) || defined(__MSYS__)
+    regs->ip = (uintptr_t)uc->uc_mcontext.rip;
+    regs->sp = (uintptr_t)uc->uc_mcontext.rsp;
+    regs->fp = (uintptr_t)uc->uc_mcontext.rbp;
   #else
     regs->ip = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
     regs->sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
@@ -52,6 +56,10 @@ void colunwind_arch_extract_registers(const void* native_context, colunwind_arch
     regs->ip = (uintptr_t)uc->uc_mcontext->__ss.__eip;
     regs->sp = (uintptr_t)uc->uc_mcontext->__ss.__esp;
     regs->fp = (uintptr_t)uc->uc_mcontext->__ss.__ebp;
+  #elif defined(__CYGWIN__) || defined(__MSYS__)
+    regs->ip = (uintptr_t)uc->uc_mcontext.eip;
+    regs->sp = (uintptr_t)uc->uc_mcontext.esp;
+    regs->fp = (uintptr_t)uc->uc_mcontext.ebp;
   #else
     regs->ip = (uintptr_t)uc->uc_mcontext.gregs[REG_EIP];
     regs->sp = (uintptr_t)uc->uc_mcontext.gregs[REG_ESP];

@@ -66,6 +66,7 @@ size_t colunwind_safe_vsnprintf(char* buf, size_t size, const char* fmt, va_list
         /* 长度修饰符 */
         bool is_long_long = false;
         if (fmt[i] == 'l') {
+            is_long_long = (sizeof(long) == 8);
             i++;
             if (fmt[i] == 'l') {
                 is_long_long = true;

@@ -1,3 +1,7 @@
+#if !defined(_WIN32)
+#define _GNU_SOURCE
+#endif
+
 #include "colunwind/colunwind.h"
 #include "internal.h"
 #include "os/os.h"
@@ -8,9 +12,9 @@
 #include <windows.h>
 #include <dbghelp.h>
 #else
-#define _GNU_SOURCE
-#include <dlfcn.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <dlfcn.h>
 #endif
 
 colunwind_status_t colunwind_resolve_location(uintptr_t address, colunwind_frame_t* out_frame) {
@@ -118,19 +122,61 @@ colunwind_status_t colunwind_resolve_location(uintptr_t address, colunwind_frame
     return COLUNWIND_SUCCESS;
 
 #else
-    /* POSIX: 基于 dladdr 与符号信息 */
+    /* POSIX: 基于 dladdr 与 addr2line / 符号信息 */
     Dl_info info;
+    memset(&info, 0, sizeof(info));
     if (dladdr((void*)address, &info) != 0) {
-        if (info.dli_sname) {
+        if (info.dli_sname && info.dli_sname[0] != '\0') {
             colunwind_safe_strncpy(out_frame->symbol_name, info.dli_sname, sizeof(out_frame->symbol_name));
             out_frame->offset = address - (uintptr_t)info.dli_saddr;
         } else {
             colunwind_safe_strncpy(out_frame->symbol_name, "???", sizeof(out_frame->symbol_name));
             out_frame->offset = 0;
         }
+        if (info.dli_fname && info.dli_fname[0] != '\0') {
+            const char* slash = strrchr(info.dli_fname, '/');
+            const char* mod_name = slash ? (slash + 1) : info.dli_fname;
+            colunwind_safe_strncpy(out_frame->module_name, mod_name, sizeof(out_frame->module_name));
+        }
     } else {
         colunwind_safe_strncpy(out_frame->symbol_name, "???", sizeof(out_frame->symbol_name));
         out_frame->offset = 0;
+    }
+
+    /* 尝试使用 addr2line 获取源码文件与行号 */
+    const char* binary_path = (info.dli_fname && info.dli_fname[0] != '\0') ? info.dli_fname : "/proc/self/exe";
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "addr2line -e \"%s\" -f -C 0x%lx 2>/dev/null",
+             binary_path, (unsigned long)address);
+    FILE* a2l_pipe = popen(cmd, "r");
+    if (a2l_pipe) {
+        char fn_line[256];
+        char loc_line[512];
+        if (fgets(fn_line, sizeof(fn_line), a2l_pipe)) {
+            size_t flen = colunwind_safe_strlen(fn_line);
+            while (flen > 0 && (fn_line[flen - 1] == '\r' || fn_line[flen - 1] == '\n')) {
+                fn_line[--flen] = '\0';
+            }
+            if (flen > 0 && strcmp(fn_line, "??") != 0) {
+                colunwind_safe_strncpy(out_frame->symbol_name, fn_line, sizeof(out_frame->symbol_name));
+            }
+        }
+        if (fgets(loc_line, sizeof(loc_line), a2l_pipe)) {
+            size_t llen = colunwind_safe_strlen(loc_line);
+            while (llen > 0 && (loc_line[llen - 1] == '\r' || loc_line[llen - 1] == '\n')) {
+                loc_line[--llen] = '\0';
+            }
+            char* colon = strrchr(loc_line, ':');
+            if (colon) {
+                *colon = '\0';
+                uint32_t line_no = (uint32_t)atoi(colon + 1);
+                if (line_no > 0 && strcmp(loc_line, "??") != 0) {
+                    colunwind_safe_strncpy(out_frame->file_path, loc_line, sizeof(out_frame->file_path));
+                    out_frame->line = line_no;
+                }
+            }
+        }
+        pclose(a2l_pipe);
     }
 
     /* 如果有内嵌 DWARF 行号信息，提取行列号与源码 */
